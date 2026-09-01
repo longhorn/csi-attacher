@@ -194,7 +194,6 @@ func (p *TextParser) reset(in io.Reader) {
 // start of a line (or whitespace leading up to it).
 func (p *TextParser) startOfLine() stateFn {
 	p.lineCount++
-	p.currentMetric = nil
 	p.currentMetricIsInsideBraces = false
 	p.currentMetricInsideBracesIsPresent = false
 	if p.skipBlankTab(); p.err != nil {
@@ -340,15 +339,6 @@ func (p *TextParser) startLabelName() stateFn {
 		return nil // Unexpected end of input.
 	}
 	if p.currentByte == '}' {
-		if p.currentMetric == nil {
-			// The closing brace was reached before any metric name was read,
-			// e.g. for the input "{}". There is no metric to attach labels to,
-			// so this is a malformed exposition. This mirrors the guard in
-			// startLabelValue. currentMetric is cleared at the start of each line.
-			p.parseError("invalid metric name")
-			p.currentLabelPairs = nil
-			return nil
-		}
 		p.currentMetric.Label = append(p.currentMetric.Label, p.currentLabelPairs...)
 		p.currentLabelPairs = nil
 		if p.skipBlankTab(); p.err != nil {
@@ -495,7 +485,7 @@ func (p *TextParser) startLabelValue() stateFn {
 		return p.startLabelName
 
 	case '}':
-		if p.currentMetric == nil {
+		if p.currentMF == nil {
 			p.parseError("invalid metric name")
 			return nil
 		}

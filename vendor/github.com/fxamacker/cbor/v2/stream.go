@@ -27,29 +27,9 @@ func NewDecoder(r io.Reader) *Decoder {
 }
 
 // Decode reads CBOR value and decodes it into the value pointed to by v.
-//
-// If the CBOR data item is well-formed but rejected by a value restriction
-// (e.g. NaN, Inf), a serialization restriction (e.g. IndefLength), or
-// can't be decoded into v (e.g. type mismatch), Decode returns the error
-// and advances to the next CBOR data item. Decode doesn't advance if the
-// data item is malformed, exceeds a resource limit, or can't be read completely.
 func (dec *Decoder) Decode(v any) error {
-	_, err := dec.readNext(dec.d.dm)
+	_, err := dec.readNext()
 	if err != nil {
-		// NOTE: The list of error types must be in sync with the error types
-		// returned from wellformed() caused by the value and serialization
-		// restrictions.
-		switch err.(type) {
-		case *IndefiniteLengthError, *UnacceptableDataItemError, *TagsMdError:
-			n, wellformedSyntaxErr := dec.readNext(dec.d.dm.wellformedSyntaxMode)
-			if wellformedSyntaxErr == nil {
-				// The current CBOR data item has wellformed syntax but contains restricted values.
-				// Advance offset so the next CBOR data item can be decoded.
-				dec.off += n
-				dec.bytesRead += n
-			}
-		}
-
 		// Return validation error or read error.
 		return err
 	}
@@ -69,10 +49,9 @@ func (dec *Decoder) Decode(v any) error {
 }
 
 // Skip skips to the next CBOR data item (if there is any),
-// otherwise it returns error such as io.EOF, io.ErrUnexpectedEOF, etc.
-// Skip ignores value and serialization restrictions (e.g. NaN, IndefLength).
+// otherwise it returns error such as io.EOF, io.UnexpectedEOF, etc.
 func (dec *Decoder) Skip() error {
-	n, err := dec.readNext(dec.d.dm.wellformedSyntaxMode)
+	n, err := dec.readNext()
 	if err != nil {
 		// Return validation error or read error.
 		return err
@@ -97,7 +76,7 @@ func (dec *Decoder) Buffered() io.Reader {
 // readNext() reads next CBOR data item from Reader to buffer.
 // It returns the size of next CBOR data item.
 // It also returns validation error or read error if any.
-func (dec *Decoder) readNext(dm *decMode) (int, error) {
+func (dec *Decoder) readNext() (int, error) {
 	var readErr error
 	var validErr error
 
@@ -105,15 +84,9 @@ func (dec *Decoder) readNext(dm *decMode) (int, error) {
 		// Process any unread data in dec.buf.
 		if dec.off < len(dec.buf) {
 			dec.d.reset(dec.buf[dec.off:])
-
-			off := dec.off      // Save offset before data validation
-			savedDm := dec.d.dm // Save dm before setting dec.d.dm to dm parameter
-
-			dec.d.dm = dm
+			off := dec.off // Save offset before data validation
 			validErr = dec.d.wellformed(true, false)
-
-			dec.d.dm = savedDm // Restore dm in dec.d
-			dec.off = off      // Restore offset
+			dec.off = off // Restore offset
 
 			if validErr == nil {
 				return dec.d.off, nil
@@ -227,34 +200,23 @@ func (enc *Encoder) Encode(v any) error {
 		}
 	}
 
-	bp := getEncodeBuffer()
+	buf := getEncodeBuffer()
 
-	rv := reflect.ValueOf(v)
-
-	var b []byte
-	var handled bool
-	var err error
-	if tryFastPath(rv) {
-		b, handled, err = fastEncode(*bp, enc.em, v)
-	}
-	if !handled {
-		b, err = encode(*bp, enc.em, rv)
-	}
-	*bp = b[:0]
+	err := encode(buf, enc.em, reflect.ValueOf(v))
 
 	// Validate the encoded chunk against the indefinite-length data item using a byte-based check.
 	// This reliably detects chunks from cbor.Marshaler, registered tags, StringToByteString, etc.,
 	// which may produce a chunk inconsistent with the parent's major type.
 	// Applies only to indefinite-length byte/text string parents (RFC 8949 Section 3.2.3).
 	if err == nil && len(enc.indefs) > 0 {
-		err = validateIndefiniteLengthChunkByData(enc.indefs[len(enc.indefs)-1].typ, b, v)
+		err = validateIndefiniteLengthChunkByData(enc.indefs[len(enc.indefs)-1].typ, buf.Bytes(), v)
 	}
 
 	if err == nil {
-		_, err = enc.w.Write(b)
+		_, err = enc.w.Write(buf.Bytes())
 	}
 
-	putEncodeBuffer(bp)
+	putEncodeBuffer(buf)
 
 	if err != nil {
 		return err
@@ -399,7 +361,9 @@ type RawMessage []byte
 // MarshalCBOR returns m or CBOR nil if m is nil.
 func (m RawMessage) MarshalCBOR() ([]byte, error) {
 	if len(m) == 0 {
-		return []byte{cborNil}, nil
+		b := make([]byte, len(cborNil))
+		copy(b, cborNil)
+		return b, nil
 	}
 	return m, nil
 }

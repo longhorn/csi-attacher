@@ -22,7 +22,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/prometheus/procfs/internal/parsers"
+	"github.com/prometheus/procfs/internal/util"
 )
 
 // Zoneinfo holds info parsed from /proc/zoneinfo.
@@ -84,6 +84,7 @@ func (fs FS) Zoneinfo() ([]Zoneinfo, error) {
 }
 
 func parseZoneinfo(zoneinfoData []byte) ([]Zoneinfo, error) {
+
 	zoneinfo := []Zoneinfo{}
 
 	for block := range bytes.SplitSeq(zoneinfoData, []byte("\nNode")) {
@@ -102,7 +103,7 @@ func parseZoneinfo(zoneinfoData []byte) ([]Zoneinfo, error) {
 			if len(parts) < 2 {
 				continue
 			}
-			vp := parsers.NewValueParser(parts[1])
+			vp := util.NewValueParser(parts[1])
 			switch parts[0] {
 			case "nr_free_pages":
 				zoneinfoElement.NrFreePages = vp.PInt64()
@@ -178,7 +179,7 @@ func parseZoneinfo(zoneinfoData []byte) ([]Zoneinfo, error) {
 				protectionValues = strings.Replace(protectionValues, ")", "", 1)
 				protectionValues = strings.TrimSpace(protectionValues)
 				protectionStringMap := strings.Split(protectionValues, ", ")
-				val, err := parsers.ParsePInt64s(protectionStringMap)
+				val, err := util.ParsePInt64s(protectionStringMap)
 				if err == nil {
 					zoneinfoElement.Protection = val
 				}

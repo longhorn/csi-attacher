@@ -107,7 +107,6 @@ $(CMDS:%=container-%): container-%: build-%
 
 $(CMDS:%=push-%): push-%: container-%
 	set -ex; \
-	export DOCKER_CLI_EXPERIMENTAL=enabled; \
 	push_image () { \
 		docker tag $*:latest $(IMAGE_NAME):$$tag; \
 		docker push $(IMAGE_NAME):$$tag; \
@@ -116,17 +115,11 @@ $(CMDS:%=push-%): push-%: container-%
 		if [ "$$tag" = "canary" ] || echo "$$tag" | grep -q -e '-canary$$'; then \
 			: "creating or overwriting canary image"; \
 			push_image; \
-		elif out=$$(docker manifest inspect $(IMAGE_NAME):$$tag 2>&1); then \
-			: "release image $(IMAGE_NAME):$$tag already exists, skipping push"; \
+		elif docker pull $(IMAGE_NAME):$$tag 2>&1 | tee /dev/stderr | grep -q "manifest for $(IMAGE_NAME):$$tag not found"; then \
+			: "creating release image"; \
+			push_image; \
 		else \
-			case "$$out" in \
-			*"manifest unknown"*|*MANIFEST_UNKNOWN*|*"no such manifest"*|*"not found"*) \
-				: "creating release image"; \
-				push_image;; \
-			*) \
-				echo >&2 "ERROR: cannot determine whether $(IMAGE_NAME):$$tag exists: $$out"; \
-				exit 1;; \
-			esac; \
+			: "release image $(IMAGE_NAME):$$tag already exists, skipping push"; \
 		fi; \
 	done
 
@@ -206,18 +199,12 @@ $(CMDS:%=push-multiarch-%): push-multiarch-%: check-pull-base-ref build-%
 			: "creating or overwriting canary image for release branch"; \
 			release_canary_tag=$$(echo $(PULL_BASE_REF) | cut -f2 -d '-')-canary; \
 			pushMultiArch $$release_canary_tag; \
-	elif out=$$(docker manifest inspect $(IMAGE_NAME):$(PULL_BASE_REF) 2>&1); then \
+	elif docker pull $(IMAGE_NAME):$(PULL_BASE_REF) 2>&1 | tee /dev/stderr | grep -q "manifest for $(IMAGE_NAME):$(PULL_BASE_REF) not found"; then \
+			: "creating release image"; \
+			pushMultiArch $(PULL_BASE_REF); \
+	else \
 			: "ERROR: release image $(IMAGE_NAME):$(PULL_BASE_REF) already exists: a new tag is required!"; \
 			exit 1; \
-	else \
-		case "$$out" in \
-		*"manifest unknown"*|*MANIFEST_UNKNOWN*|*"no such manifest"*|*"not found"*) \
-			: "creating release image"; \
-			pushMultiArch $(PULL_BASE_REF);; \
-		*) \
-			echo >&2 "ERROR: cannot determine whether $(IMAGE_NAME):$(PULL_BASE_REF) exists: $$out"; \
-			exit 1;; \
-		esac; \
 	fi
 
 .PHONY: check-pull-base-ref
@@ -252,10 +239,9 @@ test: test-fmt
 test-fmt:
 	@ echo; echo "### $@:"
 	files=$$(find . -name '*.go' | grep -v './vendor' $(TEST_FMT_FILTER_CMD)); \
-	gofmt=$$(go env GOROOT)/bin/gofmt; \
-	if [ $$($$gofmt -d $$files | wc -l) -ne 0 ]; then \
+	if [ $$(gofmt -d $$files | wc -l) -ne 0 ]; then \
 		echo "formatting errors:"; \
-		$$gofmt -d $$files; \
+		gofmt -d $$files; \
 		false; \
 	fi
 

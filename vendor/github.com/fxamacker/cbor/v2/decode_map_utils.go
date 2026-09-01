@@ -62,12 +62,12 @@ func findFieldCaseInsensitive(flds decodingFields, key string) (int, bool) {
 	return -1, false
 }
 
-// handleUnmatchedMapEntry handles a map entry whose key does not match any struct
+// handleUnmatchedMapKey handles a map entry whose key does not match any struct
 // field. It can return UnknownFieldError or DupMapKeyError.
-// handleUnmatchedMapEntry consumes the CBOR value, so the caller doesn't need to skip any values.
+// handleUnmatchedMapKey consumes the CBOR value, so the caller doesn't need to skip any values.
 // If an error is returned, the caller should abort parsing the map and return the error.
 // If no error is returned, the caller should continue to process the next map pair.
-func handleUnmatchedMapEntry(
+func handleUnmatchedMapKey(
 	d *decoder,
 	key any,
 	i int,

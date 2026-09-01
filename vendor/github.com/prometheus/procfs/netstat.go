@@ -61,12 +61,7 @@ func parseNetstat(filePath string) (NetStat, error) {
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
-	if !scanner.Scan() {
-		if err := scanner.Err(); err != nil {
-			return NetStat{}, err
-		}
-		return netStat, nil
-	}
+	scanner.Scan()
 
 	// First string is always a header for stats
 	var headers []string
@@ -81,10 +76,6 @@ func parseNetstat(filePath string) (NetStat, error) {
 			}
 			netStat.Stats[headers[num]] = append(netStat.Stats[headers[num]], value)
 		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return NetStat{}, err
 	}
 
 	return netStat, nil
