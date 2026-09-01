@@ -1769,7 +1769,6 @@ func (d *decoder) parseToTime() (time.Time, bool, error) {
 			}
 			return t, true, nil
 		}
-		d.skip()
 		return time.Time{}, false, &UnmarshalTypeError{CBORType: t.String(), GoType: typeTime.String()}
 
 	case cborTypeTextString:
@@ -1846,7 +1845,6 @@ func (d *decoder) parseToTime() (time.Time, bool, error) {
 		return time.Unix(int64(seconds), int64(fractional*1e9)), true, nil
 
 	default:
-		d.skip()
 		return time.Time{}, false, &UnmarshalTypeError{CBORType: t.String(), GoType: typeTime.String()}
 	}
 }
