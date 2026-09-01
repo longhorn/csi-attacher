@@ -117,23 +117,20 @@ const (
 )
 
 const (
-	cborBreakFlag = byte(0xff)
-)
-
-const (
+	cborBreakFlag                          = byte(0xff)
 	cborByteStringWithIndefiniteLengthHead = byte(0x5f)
 	cborTextStringWithIndefiniteLengthHead = byte(0x7f)
 	cborArrayWithIndefiniteLengthHead      = byte(0x9f)
 	cborMapWithIndefiniteLengthHead        = byte(0xbf)
 )
 
-const (
-	cborFalse            = byte(0xf4)
-	cborTrue             = byte(0xf5)
-	cborNil              = byte(0xf6)
-	cborNaN              = "\xf9\x7e\x00"
-	cborPositiveInfinity = "\xf9\x7c\x00"
-	cborNegativeInfinity = "\xf9\xfc\x00"
+var (
+	cborFalse            = []byte{0xf4}
+	cborTrue             = []byte{0xf5}
+	cborNil              = []byte{0xf6}
+	cborNaN              = []byte{0xf9, 0x7e, 0x00}
+	cborPositiveInfinity = []byte{0xf9, 0x7c, 0x00}
+	cborNegativeInfinity = []byte{0xf9, 0xfc, 0x00}
 )
 
 // validBuiltinTag checks that supported built-in tag numbers are followed by expected content types.
