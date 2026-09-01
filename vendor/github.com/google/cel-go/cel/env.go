@@ -48,10 +48,6 @@ type Source = common.Source
 type Ast struct {
 	source Source
 	impl   *celast.AST
-	// loadErr captures an error detected while loading the AST (e.g. an over-deep AST ingested via
-	// ParsedExprToAst / CheckedExprToAst) so it can be surfaced when the Ast is checked or planned
-	// instead of recursing into the checker or planner on adversarially deep input.
-	loadErr error
 }
 
 // NativeRep converts the AST to a Go-native representation.
@@ -399,20 +395,6 @@ func NewCustomEnv(opts ...EnvOption) (*Env, error) {
 // It is possible to have both non-nil Ast and Issues values returned from this call: however,
 // the mere presence of an Ast does not imply that it is valid for use.
 func (e *Env) Check(ast *Ast) (*Ast, *Issues) {
-	// Surface any error recorded while the Ast was loaded (e.g. an over-deep AST rejected by
-	// ParsedExprToAst / CheckedExprToAst) before recursing into the type checker on it.
-	if ast != nil && ast.loadErr != nil {
-		errs := common.NewErrors(ast.Source())
-		errs.ReportErrorString(common.NoLocation, ast.loadErr.Error())
-		return nil, NewIssuesWithSourceInfo(errs, ast.NativeRep().SourceInfo())
-	}
-	if nodeLimit := e.configuredExpressionNodeLimit(); nodeLimit > 0 && ast != nil && ast.NativeRep() != nil {
-		if count := celast.NodeCount(ast.NativeRep()); count > nodeLimit {
-			errs := common.NewErrors(ast.Source())
-			errs.ReportErrorString(common.NoLocation, fmt.Sprintf("expression node count exceeds limit: count %d, limit %d", count, nodeLimit))
-			return nil, NewIssuesWithSourceInfo(errs, ast.NativeRep().SourceInfo())
-		}
-	}
 	// Construct the internal checker env, erroring if there is an issue adding the declarations.
 	chk, err := e.initChecker()
 	if err != nil {
@@ -454,24 +436,6 @@ func (e *Env) Check(ast *Ast) (*Ast, *Issues) {
 	return ast, nil
 }
 
-// configuredExpressionSizeLimit returns the effective expression size code point limit.
-// A zero value means "use the parser default".
-func (e *Env) configuredExpressionSizeLimit() int {
-	if l := e.limits[limitCodePointSize]; l != 0 {
-		return l
-	}
-	return 100_000
-}
-
-// configuredExpressionNodeLimit returns the effective expression node limit.
-// A zero value means "use default".
-func (e *Env) configuredExpressionNodeLimit() int {
-	if l := e.limits[limitExpressionNodeCount]; l != 0 {
-		return l
-	}
-	return 100_000
-}
-
 // Compile combines the Parse and Check phases CEL program compilation to produce an Ast and
 // associated issues.
 //
@@ -481,11 +445,7 @@ func (e *Env) configuredExpressionNodeLimit() int {
 //
 // Note, for parse-only uses of CEL use Parse.
 func (e *Env) Compile(txt string) (*Ast, *Issues) {
-	src, err := common.NewTextSourceWithLimit(txt, e.configuredExpressionSizeLimit())
-	if err != nil {
-		return nil, ErrorAsIssues(err)
-	}
-	return e.CompileSource(src)
+	return e.CompileSource(common.NewTextSource(txt))
 }
 
 // CompileSource combines the Parse and Check phases CEL program compilation to produce an Ast and
@@ -690,10 +650,7 @@ func (e *Env) Validators() []ASTValidator {
 // This form of Parse creates a Source value for the input `txt` and forwards to the
 // ParseSource method.
 func (e *Env) Parse(txt string) (*Ast, *Issues) {
-	src, err := common.NewTextSourceWithLimit(txt, e.configuredExpressionSizeLimit())
-	if err != nil {
-		return nil, ErrorAsIssues(err)
-	}
+	src := common.NewTextSource(txt)
 	return e.ParseSource(src)
 }
 
@@ -714,12 +671,6 @@ func (e *Env) ParseSource(src Source) (*Ast, *Issues) {
 
 // Program generates an evaluable instance of the Ast within the environment (Env).
 func (e *Env) Program(ast *Ast, opts ...ProgramOption) (Program, error) {
-	// Surface any error recorded while the Ast was loaded (e.g. an over-deep AST rejected by
-	// ParsedExprToAst / CheckedExprToAst) rather than recursing into the planner on it. This is a
-	// cheap field read; the depth traversal itself runs once at conversion time, not here.
-	if ast != nil && ast.loadErr != nil {
-		return nil, ast.loadErr
-	}
 	return e.PlanProgram(ast.NativeRep(), opts...)
 }
 
@@ -891,9 +842,6 @@ func (e *Env) configure(opts []EnvOption) (*Env, error) {
 	}
 	if l := e.limits[limitParseRecursionDepth]; l != 0 {
 		prsrOpts = append(prsrOpts, parser.MaxRecursionDepth(l))
-	}
-	if l := e.limits[limitExpressionNodeCount]; l != 0 {
-		prsrOpts = append(prsrOpts, parser.MaxExpressionNodeCount(l))
 	}
 	e.prsr, err = parser.NewParser(prsrOpts...)
 	if err != nil {
