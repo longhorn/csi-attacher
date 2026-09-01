@@ -33,8 +33,6 @@ Encoding utilities for marshalling data into standardized representations.
 
 ### Base64.Decode
 
-**Introduced in version 0 (cost support in version 1)**
-
 Decodes base64-encoded string to bytes.
 
 This function will return an error if the string input is not
@@ -49,8 +47,6 @@ Examples:
 
 ### Base64.Encode
 
-**Introduced in version 0 (cost support in version 1)**
-
 Encodes bytes to a base64-encoded string.
 
     base64.encode(<bytes>)  -> <string>
@@ -58,20 +54,6 @@ Encodes bytes to a base64-encoded string.
 Example:
 
     base64.encode(b'hello') // return 'aGVsbG8='
-
-### JSON.Encode
-
-Introduced at version: 1
-
-Encodes a CEL value to a JSON string.
-
-    json.encode(<dyn>) -> <string>
-
-Examples:
-
-    json.encode('hello')                      // return '"hello"'
-    json.encode([1, 'two', true])             // return '[1,"two",true]'
-    json.encode({'items': [1, 'two', false]}) // return '{"items":[1,"two",false]}'
 
 ## Math
 
@@ -83,8 +65,6 @@ currently using a variable named 'math', the macro will likely work just as
 intended; however, there is some chance for collision.
 
 ### Math.Greatest
-
-**Introduced in version 0 (cost support in version 3)**
 
 Returns the greatest valued number present in the arguments to the macro.
 
@@ -112,8 +92,6 @@ Examples:
     math.greatest(dyn('string')) // runtime error
 
 ### Math.Least
-
-**Introduced in version 0 (cost support in version 3)**
 
 Returns the least valued number present in the arguments to the macro.
 
