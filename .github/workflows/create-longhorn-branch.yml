@@ -1,0 +1,67 @@
+name: Create Longhorn Branch
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Upstream branch to base on (e.g. release-3.3)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  create-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate input
+        env:
+          SOURCE_BRANCH: ${{ inputs.branch }}
+        run: |
+          if [[ -z "${SOURCE_BRANCH}" ]] || \
+             [[ "${SOURCE_BRANCH}" == -* ]] || \
+             [[ "${SOURCE_BRANCH}" == longhorn-* ]] || \
+             [[ "${SOURCE_BRANCH}" =~ ^[Rr][Ee][Ff][Ss]/ ]] || \
+             [[ ! "${SOURCE_BRANCH}" =~ ^[A-Za-z0-9._/-]+$ ]] || \
+             ! git check-ref-format --branch "${SOURCE_BRANCH}" >/dev/null 2>&1; then
+            echo "Invalid source branch name: ${SOURCE_BRANCH}"
+            exit 1
+          fi
+
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.LONGHORN_GITHUB_BOT_APP_ID }}
+          private-key: ${{ secrets.LONGHORN_GITHUB_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-workflows: write
+
+      - name: Checkout source branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          ref: refs/heads/${{ inputs.branch }}
+
+      - name: Create and push longhorn branch
+        env:
+          SOURCE_BRANCH: ${{ inputs.branch }}
+        run: |
+          TARGET_BRANCH="longhorn-${SOURCE_BRANCH}"
+
+          rc=0
+          git ls-remote --exit-code --heads origin "refs/heads/${TARGET_BRANCH}" >/dev/null || rc=$?
+
+          if [[ "${rc}" -eq 0 ]]; then
+            echo "Branch ${TARGET_BRANCH} already exists, skipping."
+            exit 0
+          elif [[ "${rc}" -ne 2 ]]; then
+            echo "Failed to query remote branches (exit code ${rc})."
+            exit "${rc}"
+          fi
+
+          git push origin "HEAD:refs/heads/${TARGET_BRANCH}"
+          echo "Created branch ${TARGET_BRANCH} from ${SOURCE_BRANCH}"
