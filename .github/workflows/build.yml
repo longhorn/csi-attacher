@@ -1,0 +1,46 @@
+name: build
+on:
+  push:
+    branches:
+    - longhorn-*
+    - v*
+    tags:
+    - v*
+  pull_request:
+    branches:
+    - longhorn-*
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+    - id: go-version
+      name: Parse Go version from release-tools/prow.sh
+      run: |
+        go_version=$(grep "configvar CSI_PROW_GO_VERSION_BUILD" release-tools/prow.sh | awk '{print $3}' | tr -d '"')
+        echo "Using Go from release-tools: ${go_version}"
+        echo "go_version=${go_version}" >>"$GITHUB_OUTPUT"
+
+    - name: Set up Go
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version: ${{ steps.go-version.outputs.go_version }}
+
+    - name: Build
+      run: |
+        . release-tools/prow.sh >/dev/null
+        make all GOFLAGS_VENDOR="${GOFLAGS_VENDOR}" BUILD_PLATFORMS="${CSI_PROW_BUILD_PLATFORMS}"
+        make container GOFLAGS_VENDOR="${GOFLAGS_VENDOR}"
+
+    - name: Run tests
+      run: |
+        . release-tools/prow.sh >/dev/null
+        make test-go test-vet test-fmt test-vendor GOFLAGS_VENDOR="${GOFLAGS_VENDOR}"
